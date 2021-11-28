@@ -1,13 +1,20 @@
 import wasm4;
 import lines;
 import math;
+import ver;
 
 version(d2d):
+
+Wall[] worldData = [
+    Wall(Type.lightStripes, [-4, -4], [-4, 4]),
+    Wall(Type.darkStripes, [-4, 4], [4, 4]),
+    Wall(Type.lightStripes, [4, 4], [4, -4]),
+    Wall(Type.darkStripes, [4, -4], [-4, -4]),
+];
 
 enum Mode {
     steel,
     fruit,
-    // paper,
     rgb,
     stop,
     start = steel,
@@ -63,29 +70,6 @@ struct Collision {
     }
 }
 
-Wall[] worldData = [
-    Wall(Type.lightStripes, [-4, -4], [-4, 4]),
-    Wall(Type.darkStripes, [-4, 4], [4, 4]),
-    Wall(Type.lightStripes, [4, 4], [4, -4]),
-    Wall(Type.darkStripes, [4, -4], [-4, -4]),
-];
-
-float fastInverseSqrt(float number)
-{
-	long i;
-	float x2, y;
-	const float threehalfs = 1.5F;
-
-	x2 = number * 0.5F;
-	y  = number;
-	i  = * cast(int *) &y;                       // evil floating point bit level hacking
-	i  = 0x5f3759df - ( i >> 1 );               // what the fuck? 
-	y  = * cast(float *) &i;
-	y  = y * (threehalfs - (x2 * y * y));   // 1st iteration
-
-	return y;
-}
-
 Collision collides(float[2] rayStart, float[2] rayEnd) {
     foreach(x, wall; worldData) {
         if (intersects(rayStart, rayEnd, [wall.start[0], wall.start[1]], [wall.start[0], wall.end[1]])) {
@@ -102,16 +86,6 @@ Collision collides(float[2] rayStart, float[2] rayEnd) {
         }
     }
     return Collision.none;
-}
-
-float invDistance(float[2] x, float[2] y) {
-    float dx = x[0]-y[0];
-    float dy = x[1]-y[1];
-    return fastInverseSqrt(dx*dx + dy*dy);
-}
-
-float distance(float[2] x, float[2] y) {
-    return 1 / invDistance(x, y);
 }
 
 int[2] val(int n, int rot, float[2] pos) {
@@ -160,17 +134,6 @@ enum fov = 90;
 enum viewDist = 12;
 enum accuracy = 8;
 enum speed = 0.05;
-enum extraRenders = 40;
-
-extern(C) void start() {
-    Data data;
-    data.time = 0;
-    data.x = 0;
-    data.y = 0;
-    data.rot = 1;
-    data.mode = Mode.init;
-    setData(data);
-}
 
 Data gameTick() {
     Data oldData = getData;
@@ -227,6 +190,16 @@ uint angleRgb(int angle) {
     return sineMod(angle, 128) * 256 * 256 + sineMod(angle + 120, 128) * 256 + sineMod(angle + 240, 128) + 0x7F7F7F;
 }
 
+extern(C) void start() {
+    Data data;
+    data.time = 0;
+    data.x = 0;
+    data.y = 0;
+    data.rot = 1;
+    data.mode = Mode.init;
+    setData(data);
+}
+
 extern(C) void update() {
     Data data = gameTick();
 
@@ -248,17 +221,10 @@ extern(C) void update() {
         palette[3] = 0x333333;
         outline = false;
         break;
-    // case Mode.paper:
-    //     palette[0] = 0x260D1C;
-    //     palette[1] = 0xA4929A;
-    //     palette[2] = 0x3F3A54;
-    //     palette[3] = 0xE4DBBA;
-    //     outline = true;
-    //     break;
     case Mode.rgb:
-        palette[0] = angleRgb(data.time / 20);
-        palette[1] = angleRgb(data.time / 20 + 120);
-        palette[2] = angleRgb(data.time / 20 + 240);
+        palette[0] = angleRgb(data.time / 10);
+        palette[1] = angleRgb(data.time / 10 + 120);
+        palette[2] = angleRgb(data.time / 10 + 240);
         palette[3] = 0xFFFFFF;
         outline = false;
         break;
@@ -267,26 +233,11 @@ extern(C) void update() {
     }
 
     int n = (data.time % 360 + 360) % 360;
-    int[2] last = [0, 0];
-    int change = 0;
-    foreach (i; -1..160 + extraRenders) {
+    foreach (i; 0..160) {
         int[2] got = val(i, data.rot, data.pos);
         *drawColors = cast(ushort) (0x44);
         line(i, 0, i, 160);
-        if (!outline) {
-            *drawColors = cast(ushort) (0x40 + got[0]);
-            line(i, 80 - got[1], i, 80 + got[1]);
-        } else {
-            if (got[0] != last[0]) {
-                *drawColors = cast(ushort) (0x40 + last[0]);
-                line(change, 80 - last[1], i, 80 - got[1]);
-                line(change, 80 + last[1], i, 80 + got[1]);
-                line(i - 1, 80 - got[1], i - 1, 80 + got[1]);
-                *drawColors = cast(ushort) (0x40 + got[0]);
-                line(i, 80 - got[1], i, 80 + got[1]);
-                change = i + 1;
-                last = got;
-            }
-        }
+        *drawColors = cast(ushort) (0x40 + got[0]);
+        line(i, 80 - got[1], i, 80 + got[1]);
     }
 }
