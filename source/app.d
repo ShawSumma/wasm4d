@@ -2,11 +2,23 @@ import wasm4;
 import lines;
 import math;
 
+enum Mode {
+    steel,
+    fruit,
+    paper,
+    rgb,
+    stop,
+    start = steel,
+}
+
 struct Data {
-    int time;
     float x;
     float y;
+    int time;
     int rot;
+    Mode mode;
+    bool button1;
+    bool button2;
 
     float[2] pos() {
         return [x, y];
@@ -23,18 +35,13 @@ void setData(Data val) {
     diskw(&val, Data.sizeof);
 }
 
-// enum float[2][2][] boxes = [
-//     [[3, 5], [3, -5]],
-//     [[3, -5], [-5, -5]],
-//     [[-5, -5], [-5, 5]],
-//     [[-5, 5], [3, 5]],
-// ];
-
 enum Type : ubyte {
     none,
-    yellow,
-    orange,
-    striped,
+    light,
+    medium,
+    dark,
+    lightStripes,
+    darkStripes,
 }
 
 struct Wall {
@@ -55,10 +62,10 @@ struct Collision {
 }
 
 Wall[] worldData = [
-    Wall(Type.striped, [-4, -4], [-4, 4]),
-    Wall(Type.striped, [-4, 4], [4, 4]),
-    Wall(Type.striped, [4, 4], [4, -4]),
-    Wall(Type.striped, [4, -4], [-4, -4]),
+    Wall(Type.lightStripes, [-4, -4], [-4, 4]),
+    Wall(Type.darkStripes, [-4, 4], [4, 4]),
+    Wall(Type.lightStripes, [4, 4], [4, -4]),
+    Wall(Type.darkStripes, [4, -4], [-4, -4]),
 ];
 
 float fastInverseSqrt(float number)
@@ -121,16 +128,25 @@ int[2] val(int n, int rot, float[2] pos) {
             final switch (hit.block.type) {
             case Type.none:
                 assert(false);
-            case Type.orange:
+            case Type.dark:
+                return [3, ret2];
+            case Type.medium:
                 return [2, ret2];
-            case Type.yellow:
+            case Type.light:
                 return [1, ret2];
-            case Type.striped:
+            case Type.lightStripes:
                 int fromStart = cast(int) distance([cast(float) hit.block.start[0], cast(float) hit.block.start[1]], hit.pos);
                 if (fromStart % 2 == 0) {
                     return [2, ret2];
                 } else {
                     return [1, ret2];
+                }
+            case Type.darkStripes:
+                int fromStart = cast(int) distance([cast(float) hit.block.start[0], cast(float) hit.block.start[1]], hit.pos);
+                if (fromStart % 2 == 0) {
+                    return [3, ret2];
+                } else {
+                    return [2, ret2];
                 }
             }
         }
@@ -139,9 +155,10 @@ int[2] val(int n, int rot, float[2] pos) {
 }
 
 enum fov = 90;
-enum viewDist = 32;
+enum viewDist = 12;
 enum accuracy = 8;
 enum speed = 0.03;
+enum extraRenders = 40;
 
 extern(C) void start() {
     Data data;
@@ -149,52 +166,118 @@ extern(C) void start() {
     data.x = 0;
     data.y = 0;
     data.rot = 1;
+    data.mode = Mode.init;
     setData(data);
 }
 
-extern(C) void update() {
-    palette[0] = 0xfff6d3;
-    palette[1] = 0xf9a875;
-    palette[2] = 0xeb6b6f;
-    palette[3] = 0x7c3f58;
+Data gameTick() {
     Data oldData = getData;
-    Data data = oldData;
+    Data newData = oldData;
     
     ubyte gamepad = *gamepad1;
     if (gamepad & buttonRight) {
-        data.rot -= 2;
+        newData.rot -= 2;
     }
     if (gamepad & buttonLeft) {
-        data.rot += 2;
+        newData.rot += 2;
     }
     if (gamepad & buttonUp) {
-        data.x += sine(data.rot) * speed;
-        data.y += cosine(data.rot) * speed;
+        newData.x += sine(newData.rot) * speed;
+        newData.y += cosine(newData.rot) * speed;
     }
     if (gamepad & buttonDown) {
-        data.x -= sine(data.rot) * speed;
-        data.y -= cosine(data.rot) * speed;
+        newData.x -= sine(newData.rot) * speed;
+        newData.y -= cosine(newData.rot) * speed;
+    }
+    newData.button1 = (gamepad & button1) != 0;
+    newData.button2 = (gamepad & button2) != 0;
+
+    if (newData.button1 && !oldData.button1) {
+        newData.mode += 1;
+        if (newData.mode == Mode.stop) {
+            newData.mode = Mode.start;
+        }
     }
 
-    if (collides(oldData.pos, data.pos).isHit) {
-        data.x = oldData.x;
-        data.y = oldData.y;
+    if (collides(oldData.pos, newData.pos).isHit) {
+        newData.x = oldData.x;
+        newData.y = oldData.y;
     }
 
-    data.time += 1;
-    setData(data);
+    newData.time += 1;
+    setData(newData);
+    return newData;
+}
+
+uint sineMod(int angle, uint max) {
+    return (cast(uint)((sine(angle) + 1) * max / 2) % max);
+}
+
+uint angleRgb(int angle) {
+    return sineMod(angle, 128) * 256 * 256 + sineMod(angle + 120, 128) * 256 + sineMod(angle + 240, 128) + 0x7F7F7F;
+}
+
+extern(C) void update() {
+    Data data = gameTick();
+
+    bool outline = false;
+
+    final switch (data.mode)
+    {
+    case Mode.fruit:
+        palette[0] = 0xFFF6D3;
+        palette[1] = 0xF9A875;
+        palette[2] = 0xEb6B6F;
+        palette[3] = 0x7C3F58;
+        outline = false;
+        break;
+    case Mode.steel:
+        palette[0] = 0xAAAAAA;
+        palette[1] = 0x888888;
+        palette[2] = 0x555555;
+        palette[3] = 0x333333;
+        outline = false;
+        break;
+    case Mode.paper:
+        palette[0] = 0x260D1C;
+        palette[1] = 0xA4929A;
+        palette[2] = 0x3F3A54;
+        palette[3] = 0xE4DBBA;
+        outline = true;
+        break;
+    case Mode.rgb:
+        palette[0] = angleRgb(data.time / 20);
+        palette[1] = angleRgb(data.time / 20 + 120);
+        palette[2] = angleRgb(data.time / 20 + 240);
+        palette[3] = 0xFFFFFF;
+        outline = false;
+        break;
+    case Mode.stop:
+        assert(false);
+    }
 
     int n = (data.time % 360 + 360) % 360;
     float angle = sine(80 + n);
-    foreach (i; 0..160) {
+    int[2] last = [0, 0];
+    int change = 0;
+    foreach (i; -1..160 + extraRenders) {
         int[2] got = val(i, data.rot, data.pos);
         *drawColors = cast(ushort) (0x44);
-        line(i, 0, i, 80 - got[1]);
-        if (got[1] != 0) {
+        line(i, 0, i, 160);
+        if (!outline) {
             *drawColors = cast(ushort) (0x40 + got[0]);
             line(i, 80 - got[1], i, 80 + got[1]);
+        } else {
+            if (got[0] != last[0]) {
+                *drawColors = cast(ushort) (0x40 + last[0]);
+                line(change, 80 - last[1], i, 80 - got[1]);
+                line(change, 80 + last[1], i, 80 + got[1]);
+                line(i - 1, 80 - got[1], i - 1, 80 + got[1]);
+                *drawColors = cast(ushort) (0x40 + got[0]);
+                line(i, 80 - got[1], i, 80 + got[1]);
+                change = i + 1;
+                last = got;
+            }
         }
-        *drawColors = cast(ushort) (0x44);
-        line(i, 80 + got[1], i, 160);
     }
 }
