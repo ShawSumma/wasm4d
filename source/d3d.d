@@ -1,11 +1,23 @@
 import wasm4;
 import lines;
 import math;
-import impl;
+import algo;
 import ver;
 
 version(d2d) {}
 else:
+
+Cube[] worldData = [
+    Cube(Color.black, [0, 0, 0]),
+    Cube(Color.black, [0, 1, 0]),
+    Cube(Color.black, [0, 2, 0]),
+    Cube(Color.black, [1, 2, 0]),
+    Cube(Color.black, [2, 2, 0]),
+    Cube(Color.black, [0, 3, 0]),
+    Cube(Color.black, [2, 3, 0]),
+    Cube(Color.black, [0, 4, 0]),
+    Cube(Color.black, [2, 4, 0]),
+];
 
 enum Plane: uint {
     x,
@@ -13,15 +25,7 @@ enum Plane: uint {
     z,
 }
 
-Quad[] worldData = [
-    Quad.face(Color.dark, Plane.x, [10, -1, 0]),
-    Quad.face(Color.light, Plane.y, [10, -1, 0]),
-    Quad.face(Color.black, Plane.z, [10, -1, 0]),
-    // Quad.face(Color.dark, Plane.z, [-5, 0, -1]),
-    // Quad.face(Color.dark, Plane.z, [-1, 0, -1]),
-];
-
-enum Color : ushort {
+enum Color : ubyte {
     white = 0x41,
     light = 0x42,
     dark = 0x43,
@@ -84,12 +88,18 @@ struct Triangle {
 }
 
 struct Quad {
-    Triangle t1;
-    Triangle t2;
+    Color color;
+    float[3] p1;
+    float[3] p2;
+    float[3] p3;
+    float[3] p4;
 
-    this(Color c, float[3] p1, float[3] p2, float[3] p3, float[3] p4) {
-        t1 = Triangle(c, p1, p2, p3);
-        t2 = Triangle(c, p1, p3, p4);
+    this(Color c, float[3] a1, float[3] a2, float[3] a3, float[3] a4) {
+        color = c;
+        p1 = a1;
+        p2 = a2;
+        p3 = a3;
+        p4 = a4;
     }
 
     static Quad face(Color color, Plane plane, float[3] pos) {
@@ -121,14 +131,51 @@ struct Quad {
         }
     }
 
+    float[3] center() {
+        float[3] all = [0, 0, 0];
+        foreach (sub; [p1, p2, p3, p4]) {
+            all[0] += sub[0];
+            all[1] += sub[1];
+            all[2] += sub[2];
+        }
+        all[0] /= 4;
+        all[1] /= 4;
+        all[2] /= 4;
+        return all;
+    }
+
     void draw(Camera camera) {
+        Triangle t1 = Triangle(color, p1, p2, p3);
+        Triangle t2 = Triangle(color, p1, p3, p4);
         t1.draw(camera);
         t2.draw(camera);
     }
 }
 
-struct Voxel {
+struct Cube {
+    Color color;
+    byte[3] pos;
 
+    void draw(Camera camera) {
+        float[3] fpos = [cast(float) pos[0], cast(float) pos[1], cast(float) pos[2]];
+        Quad ax = Quad.face(color, Plane.x, fpos);
+        Quad ay = Quad.face(color, Plane.y, fpos);
+        Quad az = Quad.face(color, Plane.z, fpos);
+        Quad bx = Quad.face(color, Plane.x, [fpos[0] + 1, fpos[1], fpos[2]]);
+        Quad by = Quad.face(color, Plane.y, [fpos[0], fpos[1] + 1, fpos[2]]);
+        Quad bz = Quad.face(color, Plane.z, [fpos[0], fpos[1], fpos[2] + 1]);
+        ax.draw(camera);
+        ay.draw(camera);
+        az.draw(camera);
+        bx.draw(camera);
+        by.draw(camera);
+        bz.draw(camera);
+    }
+
+    float dist(float[3] val) {
+        float[3] fpos = [0.5 + cast(float) pos[0], 0.5 + cast(float) pos[1], 0.5 + cast(float) pos[2]];
+        return distance(fpos, val);
+    }
 }
 
 Data getData() {
@@ -157,12 +204,6 @@ enum accuracy = 8;
 enum speed = 0.05;
 enum extraRenders = 40;
 
-extern(C) void start() {
-    Data data;
-    data.time = 0;
-    data.camera = Camera(0, [0, 0, 0]);
-    setData(data);
-}
 
 Data gameTick() {
     Data oldData = getData;
@@ -170,10 +211,10 @@ Data gameTick() {
     
     ubyte gamepad = *gamepad1;
     if (gamepad & buttonRight) {
-        newData.camera.rot -= 0.02;
+        newData.camera.rot -= 0.03;
     }
     if (gamepad & buttonLeft) {
-        newData.camera.rot += 0.02;
+        newData.camera.rot += 0.03;
     }
     if (gamepad & buttonUp) {
         newData.camera.pos[0] += sin(-newData.camera.rot) * speed;
@@ -185,8 +226,6 @@ Data gameTick() {
     }
     newData.button1 = (gamepad & button1) != 0;
     newData.button2 = (gamepad & button2) != 0;
-
-    tracef("%f %f", newData.camera.pos[0], newData.camera.pos[1]);
 
     newData.time += 1;
 
@@ -216,7 +255,7 @@ Pixel toPixel(float[3] offset) {
         }
     }
     float rotx = atan2(offset[2], offset[0]) / PI * 2;
-    float roty = atan2(offset[1], offset[0]) / PI * 2;
+    float roty = -atan2(offset[1], offset[0]) / PI * 2;
     return Pixel.from(rotx * 160 + 80, roty * 160 + 80);
 }
 
@@ -229,15 +268,38 @@ Pixel toPixel(float[3] offset, float rot) {
 
 Pixel toPixelCamera(float[3] point, Camera camera) {
     float[3] diff = [point[0] - camera.pos[0], point[1] - camera.pos[1], point[2] - camera.pos[2]];
-    // float[3] diff = [camera.pos[0] - point[0], camera.pos[1] - point[1], camera.pos[2] - point[2]];
     return toPixel(diff, cast(float) camera.rot);
+}
+
+void fixWorldLocsCamera(Camera camera) {
+    foreach (i; 0..worldData.length) {
+        float best = worldData[i].dist(camera.pos);
+        foreach (j; i..worldData.length) {
+            float cur = worldData[j].dist(camera.pos);
+            if (cur > best) {
+                best = cur;
+                swap(worldData[i], worldData[j]);
+            }
+        }
+    }
+}
+
+extern(C) void start() {
+    Data data;
+    data.time = 0;
+    data.camera = Camera(0, [0, 0.5, 0]);
+    setData(data);
 }
 
 extern(C) void update() {
     Data data = gameTick();
 
+    if (data.time % 10 == 0) {
+        fixWorldLocsCamera(data.camera);
+    }
+
     int n = (data.time % 360 + 360) % 360;
-    foreach (tri; worldData) {
-        tri.draw(data.camera);
+    foreach (thing; worldData) {
+        thing.draw(data.camera);
     }
 }
