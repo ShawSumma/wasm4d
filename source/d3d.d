@@ -8,15 +8,15 @@ version(d2d) {}
 else:
 
 Cube[] worldData = [
-    Cube(Color.black, [0, 0, 0]),
-    Cube(Color.black, [0, 1, 0]),
-    Cube(Color.black, [0, 2, 0]),
-    Cube(Color.black, [1, 2, 0]),
-    Cube(Color.black, [2, 2, 0]),
-    Cube(Color.black, [0, 3, 0]),
-    Cube(Color.black, [2, 3, 0]),
-    Cube(Color.black, [0, 4, 0]),
-    Cube(Color.black, [2, 4, 0]),
+    Cube(Color.dark, [0, 0, 0]),
+    Cube(Color.light, [0, 1, 0]),
+    Cube(Color.dark, [0, 2, 0]),
+    Cube(Color.light, [-1, 2, 0]),
+    Cube(Color.dark, [-2, 2, 0]),
+    Cube(Color.light, [0, 3, 0]),
+    Cube(Color.light, [-2, 3, 0]),
+    Cube(Color.dark, [0, 4, 0]),
+    Cube(Color.dark, [-2, 4, 0]),
 ];
 
 enum Plane: uint {
@@ -287,7 +287,7 @@ void fixWorldLocsCamera(Camera camera) {
 extern(C) void start() {
     Data data;
     data.time = 0;
-    data.camera = Camera(0, [0, 0.5, 0]);
+    data.camera = Camera(0, [0.1, 0.5, -20]);
     setData(data);
 }
 
