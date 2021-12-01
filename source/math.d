@@ -35,25 +35,46 @@ T abs(T)(T v) {
 }
 
 double sine(double x){
-  double sign=1;
-  if (x < 0) {
-      sign = -1;
-      x = -x;
-  }
-  x*=PI/180.0;
-  double res=0;
-  double term=x;
-  int k=1;
-  while (res+term!=res){
-    res+=term;
-    k+=2;
-    term*=-x*x/k/(k-1);
-  }
-  return sign*res;
+    double sign=1;
+    if (x < 0) {
+        sign = -1;
+        x = -x;
+    }
+    x*=PI/180.0;
+    double res=0;
+    double term=x;
+    int k=1;
+    while (res+term!=res){
+        res+=term;
+        k+=2;
+        term*=-x*x/k/(k-1);
+    }
+    return sign*res;
 }
 
 double cosine(double x) {
     return sine(x + 90);
+}
+
+float sin(float x) {
+    double sign=1;
+    if (x < 0) {
+        sign = -1;
+        x = -x;
+    }
+    double res=0;
+    double term=x;
+    int k=1;
+    while (res+term!=res){
+        res+=term;
+        k+=2;
+        term*=-x*x/k/(k-1);
+    }
+    return sign*res;
+}
+
+float cos(float x) {
+    return sin(x + PI / 2);
 }
 
 float invDistance(T, size_t n)(T[n] x, T[n] y) {
@@ -61,7 +82,7 @@ float invDistance(T, size_t n)(T[n] x, T[n] y) {
     static foreach (i; 0..n) {
         {
             T ni = x[i] - y[i];
-            ret += cast(float) ni * ni;
+            ret += cast(float) ni * cast(float) ni;
         }
     }
     return fastInverseSqrt(ret);
@@ -83,32 +104,70 @@ float fastInverseSqrt(float number)
 	i  = 0x5f3759df - ( i >> 1 );               
 	y  = * cast(float *) &i;
 	y  = y * (threehalfs - (x2 * y * y));   
+	y  = y * (threehalfs - (x2 * y * y));   
 
 	return y;
 }
 
-float atan2( float y, float x )
+// Max error < 0.005 (or 0.29 degrees)
+float atan(float z)
 {
-    uint sign_mask = 0x80000000;
-    float b = 0.596227;
+    const float n1 = 0.97239411f;
+    const float n2 = -0.19194795f;
+    return (n1 + n2 * z * z) * z;
+}
 
-    // Extract the sign bits
-    uint ux_s  = sign_mask & *cast(uint *)&x;
-    uint uy_s  = sign_mask & *cast(uint *)&y;
-
-    // Determine the quadrant offset
-    float q = cast(float)( ( ~ux_s & uy_s ) >> 29 | ux_s >> 30 ); 
-
-    // Calculate the arctangent in the first quadrant
-    float bxy_a = abs( b * x * y );
-    float num = bxy_a + y * y;
-    float atan_1q =  num / ( x * x + bxy_a + num );
-
-    // Translate it to the proper quadrant
-    uint uatan_2q = (ux_s ^ uy_s) | *cast(uint *)&atan_1q;
-    return q + *cast(float *)&uatan_2q;
-} 
-
+float atan2(float y, float x)
+{
+    if (x != 0.0f)
+    {
+        if (abs(x) > abs(y))
+        {
+            const float z = y / x;
+            if (x > 0.0)
+            {
+                // atan2(y,x) = atan(y/x) if x > 0
+                return atan(z);
+            }
+            else if (y >= 0.0)
+            {
+                // atan2(y,x) = atan(y/x) + PI if x < 0, y >= 0
+                return atan(z) + PI;
+            }
+            else
+            {
+                // atan2(y,x) = atan(y/x) - PI if x < 0, y < 0
+                return atan(z) - PI;
+            }
+        }
+        else // Use property atan(y/x) = PI/2 - atan(x/y) if |y/x| > 1.
+        {
+            const float z = x / y;
+            if (y > 0.0)
+            {
+                // atan2(y,x) = PI/2 - atan(x/y) if |y/x| > 1, y > 0
+                return -atan(z) + PI/2;
+            }
+            else
+            {
+                // atan2(y,x) = -PI/2 - atan(x/y) if |y/x| > 1, y < 0
+                return -atan(z) - PI/2;
+            }
+        }
+    }
+    else
+    {
+        if (y > 0.0f) // x = 0, y > 0
+        {
+            return PI/2;
+        }
+        else if (y < 0.0f) // x = 0, y < 0
+        {
+            return -PI/2;
+        }
+    }
+    return 0.0f; // x,y = 0. Could return NaN instead.
+}
 
 float lerp(float a, float b, float mix) 
 {
