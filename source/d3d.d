@@ -49,7 +49,7 @@ struct Pixel {
     bool has;
 
     static Pixel none(float x=0, float y=0) {
-        return Pixel([cast(float) 0, cast(float) 0], false);
+        return Pixel([cast(short) x, cast(short) y], false);
     }
 
     static Pixel from(float x, float y) {
@@ -256,7 +256,11 @@ Pixel toPixel(float[3] offset) {
     }
     float rotx = atan2(offset[2], offset[0]) / PI * 2;
     float roty = -atan2(offset[1], offset[0]) / PI * 2;
-    return Pixel.from(rotx * 160 + 80, roty * 160 + 80);
+    if (offset[0] > 0) {
+        return Pixel.from(rotx * 160 + 80, roty * 160 + 80);
+    } else {
+        return Pixel.none(rotx * 160 + 80, roty * 160 + 80);
+    }
 }
 
 Pixel toPixel(float[3] offset, float rot) {
@@ -287,7 +291,7 @@ void fixWorldLocsCamera(Camera camera) {
 extern(C) void start() {
     Data data;
     data.time = 0;
-    data.camera = Camera(0, [0.1, 0.5, -20]);
+    data.camera = Camera(0, [0.1, 2.5, -20]);
     setData(data);
 }
 
